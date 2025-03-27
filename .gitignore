@@ -1,0 +1,28 @@
+# Android build files  
+android/.gradle/  
+android/app/build/  
+android/build/  
+android/local.properties  
+android/app/.cxx/
+  
+# Keystores  
+*.keystore  
+*.jks  
+  
+# Node modules  
+node_modules/  
+  
+# Environment variables  
+.env  
+.env.local  
+  
+# Logs  
+*.log  
+  
+# IDE files  
+.idea/  
+.vscode/  
+  
+# OS files  
+.DS_Store  
+Thumbs.db 
