@@ -32,5 +32,5 @@ SaveMe is a mobile personal finance manager that helps you track your bank accou
 
 1. Clone this repository
    ```bash
-   git clone https://github.com/yourusername/saveme.git
+   git clone https://github.com/Adyahrudrah/saveme.git
    cd saveme
