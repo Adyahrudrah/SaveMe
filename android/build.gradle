@@ -1,0 +1,28 @@
+buildscript {
+    ext {
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 35
+        targetSdkVersion = 35
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.0.21"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.5.2") // Specify version for stability
+        classpath("com.facebook.react:react-native-gradle-plugin:0.74.0") // Match RN version
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21") // Match kotlinVersion
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "$rootDir/../node_modules/react-native/android" }
+        maven { url "$rootDir/../node_modules/jcenter" } // Optional, JCenter is deprecated
+    }
+}
