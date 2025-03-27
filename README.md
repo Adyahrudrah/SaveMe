@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+<<<<<<< HEA
 # SaveMe - Personal Finance Manager
 
 ![App Screenshot](https://via.placeholder.com/300x600?text=SaveMe+Screenshot) <!-- Replace with actual screenshot -->
