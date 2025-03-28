@@ -86,12 +86,12 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
     loadAndUpdateMessages();
   }, []);
 
-  useEffect(() => {
-    const saveMessages = async () => {
-      await AsyncStorage.setItem("transactions", JSON.stringify(messages));
-    };
-    saveMessages();
-  }, [messages]);
+  // useEffect(() => {
+  //   const saveMessages = async () => {
+  //     await AsyncStorage.setItem("transactions", JSON.stringify(messages));
+  //   };
+  //   saveMessages();
+  // }, [messages]);
 
   useEffect(() => {
     setUnappliedCount(messages.filter((msg) => !msg.isApplied).length);
@@ -203,32 +203,45 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
     );
   };
 
-  const skipCurrentTransaction = () => {
+  const skipCurrentTransaction = async () => {
     const unappliedMessages = messages.filter((msg) => !msg.isApplied);
-    if (unappliedMessages.length > 0 && unappliedMessages[currentIndex]) {
-      const currentId = unappliedMessages[currentIndex].id;
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === currentId ? { ...msg, isApplied: true } : msg
-        )
-      );
 
-      const remainingUnapplied = messages.filter(
-        (msg) => !msg.isApplied && msg.id !== currentId
-      );
-      if (remainingUnapplied.length > 0) {
-        const newIndex =
-          currentIndex < remainingUnapplied.length ? currentIndex : 0;
-        setCurrentIndex(newIndex);
-      } else {
-        setIsModalVisible(false);
-        setCurrentIndex(0);
-      }
-
-      setAlertTitle("Success");
-      setAlertMessage("Current transaction skipped.");
-      setAlertVisible(true);
+    if (unappliedMessages.length === 0) {
+      setIsModalVisible(false);
+      setCurrentIndex(0);
+      return;
     }
+
+    const currentId = unappliedMessages[currentIndex].id;
+
+    // Create updated messages first
+    const updatedMessages = messages.map((msg) =>
+      msg.id === currentId ? { ...msg, isApplied: true } : msg
+    );
+
+    // Calculate remaining unapplied messages
+    const remainingUnapplied = updatedMessages.filter((msg) => !msg.isApplied);
+
+    // Update state
+    setMessages(updatedMessages);
+
+    // Update AsyncStorage
+    await AsyncStorage.setItem("transactions", JSON.stringify(updatedMessages));
+
+    // Handle index and modal state
+    if (remainingUnapplied.length > 0) {
+      // Stay on current index if possible, otherwise reset to 0
+      const newIndex =
+        currentIndex < remainingUnapplied.length ? currentIndex : 0;
+      setCurrentIndex(newIndex);
+    } else {
+      setIsModalVisible(false);
+      setCurrentIndex(0);
+    }
+
+    setAlertTitle("Success");
+    setAlertMessage("Transaction skipped.");
+    setAlertVisible(true);
   };
 
   const updateTransactionAmount = (id: string, newAmount: string) => {

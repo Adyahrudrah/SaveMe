@@ -48,6 +48,57 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        // Always create temp accounts
+        const tempAccounts: Account[] = [
+          {
+            type: "Bank Account",
+            name: "HDFC",
+            lastFourDigits: "2792",
+            initialBalance: "5000",
+          },
+          {
+            type: "Bank Account",
+            name: "HDFC",
+            lastFourDigits: "5914",
+            initialBalance: "5000",
+          },
+        ];
+
+        // Get any existing accounts
+        const savedAccounts = await AsyncStorage.getItem("accounts");
+        let accountsToSet = tempAccounts;
+
+        if (savedAccounts) {
+          const parsedAccounts = JSON.parse(savedAccounts);
+
+          // Only merge if there are accounts that aren't our temp accounts
+          if (
+            parsedAccounts.some(
+              (acc: Account) => !["2792", "5914"].includes(acc.lastFourDigits)
+            )
+          ) {
+            accountsToSet = [
+              ...tempAccounts,
+              ...parsedAccounts.filter(
+                (acc: Account) => !["2792", "5914"].includes(acc.lastFourDigits)
+              ),
+            ];
+          }
+        }
+
+        setAccounts(accountsToSet);
+        await AsyncStorage.setItem("accounts", JSON.stringify(accountsToSet));
+      } catch (error) {
+        console.error("Error loading accounts:", error);
+      }
+    };
+
+    loadAccounts();
+  }, []);
+
+  useEffect(() => {
     const saveAccounts = async () => {
       await AsyncStorage.setItem("accounts", JSON.stringify(accounts));
     };
