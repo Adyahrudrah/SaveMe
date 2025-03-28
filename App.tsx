@@ -1,4 +1,3 @@
-// App.tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -28,6 +27,7 @@ const App: React.FC = () => {
   const [isMainAccordionOpen, setIsMainAccordionOpen] =
     useState<boolean>(false);
   const [refreshTransactions, setRefreshTransactions] = useState(false);
+  const [linkedTo, setLinkedTo] = useState<string | null>(null);
 
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
@@ -39,68 +39,25 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const loadAccounts = async () => {
-      const savedAccounts = await AsyncStorage.getItem("accounts");
-      if (savedAccounts) {
-        setAccounts(JSON.parse(savedAccounts));
-      }
-    };
-    loadAccounts();
-  }, []);
-
-  useEffect(() => {
-    const loadAccounts = async () => {
       try {
-        // Always create temp accounts
-        const tempAccounts: Account[] = [
-          {
-            type: "Bank Account",
-            name: "HDFC",
-            lastFourDigits: "2792",
-            initialBalance: "5000",
-          },
-          {
-            type: "Bank Account",
-            name: "HDFC",
-            lastFourDigits: "5914",
-            initialBalance: "5000",
-          },
-        ];
-
-        // Get any existing accounts
         const savedAccounts = await AsyncStorage.getItem("accounts");
-        let accountsToSet = tempAccounts;
-
         if (savedAccounts) {
-          const parsedAccounts = JSON.parse(savedAccounts);
-
-          // Only merge if there are accounts that aren't our temp accounts
-          if (
-            parsedAccounts.some(
-              (acc: Account) => !["2792", "5914"].includes(acc.lastFourDigits)
-            )
-          ) {
-            accountsToSet = [
-              ...tempAccounts,
-              ...parsedAccounts.filter(
-                (acc: Account) => !["2792", "5914"].includes(acc.lastFourDigits)
-              ),
-            ];
-          }
+          setAccounts(JSON.parse(savedAccounts));
         }
-
-        setAccounts(accountsToSet);
-        await AsyncStorage.setItem("accounts", JSON.stringify(accountsToSet));
       } catch (error) {
         console.error("Error loading accounts:", error);
       }
     };
-
     loadAccounts();
   }, []);
 
   useEffect(() => {
     const saveAccounts = async () => {
-      await AsyncStorage.setItem("accounts", JSON.stringify(accounts));
+      try {
+        await AsyncStorage.setItem("accounts", JSON.stringify(accounts));
+      } catch (error) {
+        console.error("Error saving accounts:", error);
+      }
     };
     saveAccounts();
   }, [accounts]);
@@ -112,21 +69,36 @@ const App: React.FC = () => {
     if (accountNumber.length < 4) {
       return Alert.alert("Error", "Enter at least 4 digits.");
     }
-    if (!initialBalance || isNaN(Number(initialBalance))) {
+    if (!linkedTo && (!initialBalance || isNaN(Number(initialBalance)))) {
       return Alert.alert("Error", "Enter valid balance.");
     }
 
     const lastFourDigits = accountNumber.slice(-4);
+    const primaryAccount = linkedTo
+      ? accounts.find((acc) => acc.lastFourDigits === linkedTo)
+      : null;
+
+    if (accounts.some((acc) => acc.lastFourDigits === lastFourDigits)) {
+      return Alert.alert(
+        "Error",
+        "Account with these last four digits already exists."
+      );
+    }
+
     const newAccount: Account = {
       type: accountType,
       name: accountName.trim(),
       lastFourDigits,
-      initialBalance,
+      initialBalance: linkedTo
+        ? primaryAccount!.initialBalance
+        : initialBalance,
+      linkedTo: linkedTo || undefined,
     };
     setAccounts([...accounts, newAccount]);
     setAccountName("");
     setAccountNumber("");
     setInitialBalance("");
+    setLinkedTo(null);
     setAlertTitle("Success");
     setAlertMessage("Account added!");
     setAlertVisible(true);
@@ -142,6 +114,11 @@ const App: React.FC = () => {
   const handleUpdateBalance = (index: number, newBalance: string) => {
     const updatedAccounts = [...accounts];
     updatedAccounts[index].initialBalance = newBalance;
+    updatedAccounts.forEach((acc) => {
+      if (acc.linkedTo === updatedAccounts[index].lastFourDigits) {
+        acc.initialBalance = newBalance;
+      }
+    });
     setAccounts(updatedAccounts);
   };
 
@@ -163,7 +140,9 @@ const App: React.FC = () => {
           />
           <RecentTransactions
             accounts={accounts}
+            setAccounts={setAccounts}
             refreshTransactions={refreshTransactions}
+            onTransactionSubmit={handleTransactionSubmit} // Pass callback
           />
         </View>
 
@@ -203,6 +182,8 @@ const App: React.FC = () => {
                 initialBalance={initialBalance}
                 setInitialBalance={setInitialBalance}
                 onAddAccount={handleAddAccount}
+                accounts={accounts}
+                setLinkedTo={setLinkedTo}
               />
             </>
           )}

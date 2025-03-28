@@ -28,12 +28,16 @@ interface RecentTransaction {
 
 interface RecentTransactionsProps {
   accounts: Account[];
+  setAccounts: React.Dispatch<React.SetStateAction<Account[]>>;
   refreshTransactions?: boolean;
+  onTransactionSubmit?: () => void; // Add callback to trigger refresh
 }
 
 const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   accounts,
+  setAccounts,
   refreshTransactions,
+  onTransactionSubmit, // Destructure callback
 }) => {
   const [recentTransactions, setRecentTransactions] = useState<
     RecentTransaction[]
@@ -76,9 +80,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     const now = new Date();
     let filtered = transactions.filter((tx) => {
       const txDate = new Date(tx.date);
-      if (timeFilter === "all") {
-        return true;
-      }
+      if (timeFilter === "all") return true;
       if (timeFilter === "daily") {
         return (
           txDate.getDate() === now.getDate() &&
@@ -146,10 +148,11 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     setExpandedAccount(expandedAccount === accountKey ? null : accountKey);
   };
 
-  // Add this function to your RecentTransactions component
   const deleteTransaction = async (id: string) => {
     try {
-      // Remove from recent transactions
+      const transaction = recentTransactions.find((tx) => tx.id === id);
+      if (!transaction) throw new Error("Transaction not found");
+
       const updatedRecentTransactions = recentTransactions.filter(
         (tx) => tx.id !== id
       );
@@ -159,7 +162,6 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         JSON.stringify(updatedRecentTransactions)
       );
 
-      // Update main transactions to set isRead and isApplied to false
       const savedMessages = await AsyncStorage.getItem("transactions");
       if (savedMessages) {
         const transactions = JSON.parse(savedMessages);
@@ -172,12 +174,44 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         );
       }
 
+      const account = accounts.find(
+        (acc) => acc.lastFourDigits === transaction.lastFourDigits
+      );
+      if (account) {
+        const primaryAccount = account.linkedTo
+          ? accounts.find((acc) => acc.lastFourDigits === account.linkedTo)
+          : account;
+        const primaryAccountIndex = accounts.findIndex(
+          (acc) => acc.lastFourDigits === primaryAccount!.lastFourDigits
+        );
+
+        if (primaryAccountIndex !== -1) {
+          const amount = parseFloat(transaction.amount);
+          const updatedAccounts = [...accounts];
+          updatedAccounts[primaryAccountIndex].initialBalance = (
+            parseFloat(updatedAccounts[primaryAccountIndex].initialBalance) +
+            (transaction.type === "credit" ? -amount : amount)
+          ).toFixed(2);
+
+          updatedAccounts.forEach((acc) => {
+            if (acc.linkedTo === primaryAccount!.lastFourDigits) {
+              acc.initialBalance =
+                updatedAccounts[primaryAccountIndex].initialBalance;
+            }
+          });
+
+          setAccounts(updatedAccounts);
+        }
+      }
+
+      if (onTransactionSubmit) onTransactionSubmit(); // Trigger refresh in TransactionManager
+
       setAlertTitle("Success");
-      setAlertMessage("Transaction deleted and reset for editing");
+      setAlertMessage("Transaction deleted and balance updated");
       setAlertVisible(true);
     } catch (error) {
       setAlertTitle("Error");
-      setAlertMessage("Failed to delete transaction" + error);
+      setAlertMessage("Failed to delete transaction: " + error);
       setAlertVisible(true);
     }
   };
@@ -188,7 +222,6 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         Recent Transactions
       </Text>
 
-      {/* Time Filter */}
       <View style={tw`flex-row justify-around mb-3`}>
         {["all", "daily", "monthly", "yearly"].map((filter) => (
           <TouchableOpacity
@@ -208,7 +241,6 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         ))}
       </View>
 
-      {/* Filters */}
       <TextInput
         style={[
           tw`bg-amber-100 p-2 rounded-lg mb-3 text-amber-900`,
@@ -248,14 +280,12 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         </View>
       </View>
 
-      {/* Forecast Toggle and Component */}
       <View style={tw`bg-amber-200 p-2 rounded-xl flex-1 gap-2 mb-2`}>
         <TouchableOpacity
           style={tw`bg-amber-500 p-3 rounded-lg flex-row justify-between`}
           onPress={() => setShowForecast(!showForecast)}
         >
           <Icon name="trello" size={20} color="#92400e" />
-
           <Text style={[tw`text-amber-900`, styles.text]}>
             Spending Forecast
           </Text>
@@ -268,7 +298,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
         {showForecast && <SpendingForecast transactions={recentTransactions} />}
       </View>
-      {/* Transactions Display */}
+
       <View style={tw`bg-amber-200 p-2 rounded-xl flex-1 gap-2`}>
         {accounts.length === 0 ? (
           <Text style={[tw`text-amber-900 text-center`, styles.text]}>
@@ -289,7 +319,6 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     onPress={() => toggleAccordion(accountKey)}
                   >
                     <Icon name="credit-card" size={20} color="#92400e" />
-
                     <Text style={[tw`text-amber-900`, styles.text]}>
                       {accountKey}
                     </Text>

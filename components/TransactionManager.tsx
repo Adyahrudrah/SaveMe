@@ -11,7 +11,7 @@ import {
 import { request, PERMISSIONS } from "react-native-permissions";
 import SmsAndroid from "react-native-get-sms-android";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Account, Transaction } from "../types/types";
+import { Account, ExtendedTransaction } from "../types/types"; // Import unified type
 import CustomAlert from "./CustomeAlert";
 import tw from "twrnc";
 import TransactionModal from "./ReviewTransactions";
@@ -20,11 +20,6 @@ interface TransactionManagerProps {
   accounts: Account[];
   setAccounts: React.Dispatch<React.SetStateAction<Account[]>>;
   onTransactionSubmit: () => void;
-}
-
-interface ExtendedTransaction extends Transaction {
-  isApplied?: boolean;
-  category?: string;
 }
 
 const TransactionManager: React.FC<TransactionManagerProps> = ({
@@ -84,14 +79,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
       requestSmsPermission();
     };
     loadAndUpdateMessages();
-  }, []);
-
-  // useEffect(() => {
-  //   const saveMessages = async () => {
-  //     await AsyncStorage.setItem("transactions", JSON.stringify(messages));
-  //   };
-  //   saveMessages();
-  // }, [messages]);
+  }, [accounts]);
 
   useEffect(() => {
     setUnappliedCount(messages.filter((msg) => !msg.isApplied).length);
@@ -119,7 +107,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
         JSON.stringify(filter),
         (fail: string) => {
           setAlertTitle("Error");
-          setAlertMessage("Failed to fetch SMS." + fail);
+          setAlertMessage("Failed to fetch SMS: " + fail);
           setAlertVisible(true);
         },
         (_count: string, smsList: string) => {
@@ -152,7 +140,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
               );
               const recipient: string = recipientMatch
                 ? recipientMatch[1].trim()
-                : "";
+                : ""; // Default to empty string
               return {
                 id: msg._id,
                 message: body,
@@ -161,9 +149,10 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
                 amount,
                 isRead: false,
                 isApplied: false,
-                editableAmount: amount.toFixed(2),
+                editableAmount: amount.toFixed(2), // Always a string
                 recipient,
                 date: msg.date,
+                category: undefined, // Optional field
               };
             })
             .filter((msg: ExtendedTransaction): boolean =>
@@ -197,15 +186,16 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
     );
   };
 
-  const markAsApplied = (id: string) => {
-    setMessages((prev) =>
-      prev.map((msg) => (msg.id === id ? { ...msg, isApplied: true } : msg))
+  const markAsApplied = async (id: string) => {
+    const updatedMessages = messages.map((msg) =>
+      msg.id === id ? { ...msg, isApplied: true } : msg
     );
+    setMessages(updatedMessages);
+    await AsyncStorage.setItem("transactions", JSON.stringify(updatedMessages));
   };
 
   const skipCurrentTransaction = async () => {
     const unappliedMessages = messages.filter((msg) => !msg.isApplied);
-
     if (unappliedMessages.length === 0) {
       setIsModalVisible(false);
       setCurrentIndex(0);
@@ -213,24 +203,11 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
     }
 
     const currentId = unappliedMessages[currentIndex].id;
+    await markAsApplied(currentId);
 
-    // Create updated messages first
-    const updatedMessages = messages.map((msg) =>
-      msg.id === currentId ? { ...msg, isApplied: true } : msg
-    );
+    const remainingUnapplied = messages.filter((msg) => !msg.isApplied);
 
-    // Calculate remaining unapplied messages
-    const remainingUnapplied = updatedMessages.filter((msg) => !msg.isApplied);
-
-    // Update state
-    setMessages(updatedMessages);
-
-    // Update AsyncStorage
-    await AsyncStorage.setItem("transactions", JSON.stringify(updatedMessages));
-
-    // Handle index and modal state
     if (remainingUnapplied.length > 0) {
-      // Stay on current index if possible, otherwise reset to 0
       const newIndex =
         currentIndex < remainingUnapplied.length ? currentIndex : 0;
       setCurrentIndex(newIndex);
@@ -297,71 +274,80 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
         return;
       }
 
-      const accountIndex = accounts.findIndex(
+      const account = accounts.find(
         (acc) => acc.lastFourDigits === transaction.lastFourDigits
       );
-      if (accountIndex !== -1) {
-        const amount = parseFloat(transaction.editableAmount);
-        if (!isNaN(amount)) {
-          const updatedAccounts = [...accounts];
-          updatedAccounts[accountIndex].initialBalance = (
-            parseFloat(updatedAccounts[accountIndex].initialBalance) +
-            (transaction.type === "credit" ? amount : -amount)
-          ).toFixed(2);
-          setAccounts(updatedAccounts);
-          markAsRead(id);
-          markAsApplied(id);
+      if (!account) return;
 
-          const recentTransaction = {
-            id: transaction.id,
-            recipient: handleRecipient(transaction.recipient),
-            category: transaction.category,
-            amount: transaction.editableAmount,
-            accountName: updatedAccounts[accountIndex].name,
-            lastFourDigits: transaction.lastFourDigits,
-            type: transaction.type,
-            date: transaction.date,
-          };
-          const savedRecent = await AsyncStorage.getItem("recentTransactions");
-          const recentTransactions = savedRecent ? JSON.parse(savedRecent) : [];
-          recentTransactions.push(recentTransaction);
-          await AsyncStorage.setItem(
-            "recentTransactions",
-            JSON.stringify(recentTransactions)
-          );
+      const primaryAccount = account.linkedTo
+        ? accounts.find((acc) => acc.lastFourDigits === account.linkedTo)
+        : account;
+      const primaryAccountIndex = accounts.findIndex(
+        (acc) => acc.lastFourDigits === primaryAccount!.lastFourDigits
+      );
 
-          // Save the category if it exists
-          if (transaction.category) {
-            const updatedCategories = [
-              ...new Set([...savedCategories, transaction.category]),
-            ].filter(Boolean);
-            setSavedCategories(updatedCategories);
+      if (primaryAccountIndex !== -1) {
+        const updatedAccounts = [...accounts];
+        updatedAccounts[primaryAccountIndex].initialBalance = (
+          parseFloat(updatedAccounts[primaryAccountIndex].initialBalance) +
+          (transaction.type === "credit" ? amount : -amount)
+        ).toFixed(2);
+
+        updatedAccounts.forEach((acc) => {
+          if (acc.linkedTo === primaryAccount!.lastFourDigits) {
+            acc.initialBalance =
+              updatedAccounts[primaryAccountIndex].initialBalance;
           }
+        });
 
-          // Save the recipient
-          const updatedRecipients = [
-            ...new Set([...savedRecipients, transaction.recipient]),
+        setAccounts(updatedAccounts);
+        markAsRead(id);
+        await markAsApplied(id);
+
+        const recentTransaction = {
+          id: transaction.id,
+          recipient: handleRecipient(transaction.recipient),
+          category: transaction.category,
+          amount: transaction.editableAmount,
+          accountName: primaryAccount!.name,
+          lastFourDigits: primaryAccount!.lastFourDigits,
+          type: transaction.type,
+          date: transaction.date,
+        };
+        const savedRecent = await AsyncStorage.getItem("recentTransactions");
+        const recentTransactions = savedRecent ? JSON.parse(savedRecent) : [];
+        recentTransactions.push(recentTransaction);
+        await AsyncStorage.setItem(
+          "recentTransactions",
+          JSON.stringify(recentTransactions)
+        );
+
+        if (transaction.category) {
+          const updatedCategories = [
+            ...new Set([...savedCategories, transaction.category]),
           ].filter(Boolean);
-          setSavedRecipients(updatedRecipients);
+          setSavedCategories(updatedCategories);
+        }
 
-          onTransactionSubmit();
+        const updatedRecipients = [
+          ...new Set([...savedRecipients, transaction.recipient]),
+        ].filter(Boolean);
+        setSavedRecipients(updatedRecipients);
 
-          setAlertTitle("Success");
-          setAlertMessage("Transaction Applied");
-          setAlertVisible(true);
-          const unappliedMessages = messages.filter((msg) => !msg.isApplied);
-          if (unappliedMessages.length > 1) {
-            const newIndex =
-              currentIndex < unappliedMessages.length - 1 ? currentIndex : 0;
-            setCurrentIndex(newIndex);
-          } else {
-            setIsModalVisible(false);
-            setCurrentIndex(0);
-          }
+        onTransactionSubmit();
+
+        setAlertTitle("Success");
+        setAlertMessage("Transaction Applied");
+        setAlertVisible(true);
+
+        const remainingUnapplied = messages.filter((msg) => !msg.isApplied);
+        if (remainingUnapplied.length > 0) {
+          const newIndex =
+            currentIndex < remainingUnapplied.length - 1 ? currentIndex : 0;
+          setCurrentIndex(newIndex);
         } else {
-          setAlertTitle("Error");
-          setAlertMessage("Invalid Amount");
-          setAlertVisible(true);
+          setIsModalVisible(false);
+          setCurrentIndex(0);
         }
       }
     }
@@ -411,8 +397,11 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
   };
 
   const clearRecipient = () => {
-    updateRecipient(unappliedMessages[currentIndex].id, "");
-    textInputRef.current?.focus();
+    const unappliedMessages = messages.filter((msg) => !msg.isApplied);
+    if (unappliedMessages.length > 0) {
+      updateRecipient(unappliedMessages[currentIndex].id, "");
+      textInputRef.current?.focus();
+    }
   };
 
   const unappliedMessages = messages.filter((msg) => !msg.isApplied);

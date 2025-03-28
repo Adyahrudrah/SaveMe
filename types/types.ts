@@ -1,3 +1,4 @@
+// types/types.ts
 export type AccountType = 'Bank Account' | 'Credit Card' | 'Other';
 
 export interface Account {
@@ -5,6 +6,7 @@ export interface Account {
   name: string;
   lastFourDigits: string;
   initialBalance: string;
+  linkedTo?: string;
 }
 
 export interface Transaction {
@@ -14,11 +16,15 @@ export interface Transaction {
   type: 'credit' | 'debit';
   amount: number;
   isRead: boolean;
-  editableAmount: string;
-  recipient: string;
+  editableAmount: string; // Required, matches your current definition
+  recipient: string; // Required, matches your current definition
   date: string;
 }
 
+export interface ExtendedTransaction extends Transaction {
+  isApplied: boolean; // Required, default false
+  category?: string; // Optional
+}
 
 export interface RecentTransaction {
   id: string;
@@ -28,4 +34,5 @@ export interface RecentTransaction {
   lastFourDigits: string;
   type: "credit" | "debit";
   date: string;
+  category?: string; // Optional, added to match TransactionManager
 }
