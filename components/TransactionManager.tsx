@@ -144,7 +144,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
                 ? "debit"
                 : "debit";
               const amountMatch: RegExpMatchArray | null = body.match(
-                /Rs\.\s?(\d+(?:,\d{3})*\.\d{2})/
+                /Rs\.?\s?(\d+(?:,\d{3})*\.\d{2})/
               );
 
               const amount: number = amountMatch
@@ -473,7 +473,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
       <Text style={[tw`text-2xl text-amber-900 mb-2 text-center`, styles.text]}>
         Transaction Manager
       </Text>
-      <View style={tw`bg-amber-200 p-2 rounded-xl`}>
+      <View style={tw`bg-amber-200 p-2 rounded-xl elevation-2`}>
         <Text
           style={[tw`text-lg text-amber-900 mb-5 text-center`, styles.text]}
         >

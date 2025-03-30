@@ -17,6 +17,7 @@ import { Account, AccountType } from "./types/types";
 import Icon from "react-native-vector-icons/Feather";
 import tw from "twrnc";
 import CustomAlert from "./components/CustomeAlert";
+import AsyncStorageDataManager from "./components/AsyncStorageExporter";
 
 const App: React.FC = () => {
   const [accountType, setAccountType] = useState<AccountType>("Bank Account");
@@ -181,7 +182,9 @@ const App: React.FC = () => {
           SaveMe
         </Text>
 
-        <View style={tw`rounded-2xl flex-1 gap-2 bg-amber-300 p-2 mb-2`}>
+        <View
+          style={tw`rounded-2xl flex-1 gap-2 bg-amber-300 p-2 mb-2 elevation-2`}
+        >
           <TransactionManager
             accounts={accounts}
             setAccounts={setAccounts}
@@ -197,7 +200,9 @@ const App: React.FC = () => {
 
         <View>
           <TouchableOpacity
-            style={tw`bg-amber-500 p-3 mb-2 rounded-xl flex-row justify-between`}
+            style={tw`bg-amber-500 p-3 ${
+              isMainAccordionOpen ? "mb-2" : "mb-8"
+            } rounded-xl flex-row justify-between elevation-2`}
             onPress={() => setIsMainAccordionOpen(!isMainAccordionOpen)}
           >
             <Text style={[tw`text-amber-900`, styles.text]}>
@@ -235,6 +240,7 @@ const App: React.FC = () => {
                 accounts={accounts}
                 setLinkedTo={setLinkedTo}
               />
+              <AsyncStorageDataManager />
             </>
           )}
         </View>

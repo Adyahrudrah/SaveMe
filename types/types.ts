@@ -38,3 +38,8 @@ export interface RecentTransaction {
   date: string;
   category?: string; // Optional, added to match TransactionManager
 }
+
+export interface Budget {
+  category: string;
+  limit: number;
+}

@@ -56,7 +56,7 @@ const AccountsList: React.FC<AccountsListProps> = ({
       {accounts.map((account, index) => (
         <View
           key={index}
-          style={tw`bg-amber-200 p-3 rounded-xl mb-3 flex-col gap-4`}
+          style={tw`bg-amber-200 p-3 rounded-xl mb-3 flex-col gap-4 elevation-2`}
         >
           <Text style={[tw`text-amber-900 flex-1`, styles.text]}>
             {account.name} ({account.type}): **** **** ****{" "}

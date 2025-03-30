@@ -47,7 +47,7 @@ const ManageAccounts: React.FC<ManageAccountsProps> = ({
       <Text style={[tw`text-2xl text-amber-900 mb-2 text-center`, styles.text]}>
         Add New Account
       </Text>
-      <View style={tw`bg-amber-200 p-2 rounded-xl`}>
+      <View style={tw`bg-amber-200 p-2 rounded-xl elevation-2`}>
         {/* Account Type Selection */}
         <TouchableOpacity
           style={[

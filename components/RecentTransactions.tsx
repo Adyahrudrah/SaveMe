@@ -20,7 +20,7 @@ interface RecentTransaction {
   id: string;
   recipient: string;
   category?: string;
-  categoryIcon?: string; // Added categoryIcon property
+  categoryIcon?: string;
   amount: string;
   accountName: string;
   lastFourDigits: string;
@@ -32,26 +32,27 @@ interface RecentTransactionsProps {
   accounts: Account[];
   setAccounts: React.Dispatch<React.SetStateAction<Account[]>>;
   refreshTransactions?: boolean;
-  onTransactionSubmit?: () => void; // Add callback to trigger refresh
+  onTransactionSubmit?: () => void;
 }
 
 const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   accounts,
   setAccounts,
   refreshTransactions,
-  onTransactionSubmit, // Destructure callback
+  onTransactionSubmit,
 }) => {
   const [recentTransactions, setRecentTransactions] = useState<
     RecentTransaction[]
   >([]);
-  const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(
+    new Set()
+  );
   const [timeFilter, setTimeFilter] = useState<
     "all" | "daily" | "monthly" | "yearly"
   >("all");
   const [recipientFilter, setRecipientFilter] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [showForecast, setShowForecast] = useState<boolean>(false);
-
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
@@ -65,6 +66,29 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     };
     loadRecentTransactions();
   }, [accounts, refreshTransactions]);
+
+  // When category filter changes, auto-expand relevant accounts
+  useEffect(() => {
+    if (categoryFilter) {
+      const [categoryName] = categoryFilter.split("|");
+      const relevantAccounts = new Set<string>();
+
+      accounts.forEach((account) => {
+        const accountKey = `${account.name} ${account.type} - ${account.lastFourDigits}`;
+        const accountTransactions = recentTransactions.filter(
+          (tx) => tx.lastFourDigits === account.lastFourDigits
+        );
+
+        if (accountTransactions.some((tx) => tx.category === categoryName)) {
+          relevantAccounts.add(accountKey);
+        }
+      });
+
+      setExpandedAccounts(relevantAccounts);
+    } else {
+      setExpandedAccounts(new Set());
+    }
+  }, [categoryFilter, accounts, recentTransactions]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -108,10 +132,9 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
       );
     }
     if (categoryFilter) {
+      const [categoryName] = categoryFilter.split("|");
       filtered = filtered.filter(
-        (tx) =>
-          tx.category?.toLowerCase() + "|" + tx.categoryIcon?.toLowerCase() ===
-          categoryFilter.toLowerCase()
+        (tx) => tx.category?.toLowerCase() === categoryName.toLowerCase()
       );
     }
     return filtered;
@@ -137,10 +160,10 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   const uniqueCategories = Array.from(
     new Set(
       recentTransactions
-        .map((tx) => tx.category + "|" + tx.categoryIcon)
-        .filter(Boolean)
+        .map((tx) => (tx.category ? `${tx.category}|${tx.categoryIcon}` : null))
+        .filter(Boolean) as string[]
     )
-  ) as string[];
+  );
 
   const transactionsByAccount = accounts.reduce((acc, account) => {
     const accountKey = `${account.name} ${account.type} - ${account.lastFourDigits}`;
@@ -153,7 +176,17 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   }, {} as Record<string, RecentTransaction[]>);
 
   const toggleAccordion = (accountKey: string) => {
-    setExpandedAccount(expandedAccount === accountKey ? null : accountKey);
+    const newExpandedAccounts = new Set(expandedAccounts);
+    if (newExpandedAccounts.has(accountKey)) {
+      newExpandedAccounts.delete(accountKey);
+    } else {
+      newExpandedAccounts.add(accountKey);
+    }
+    setExpandedAccounts(newExpandedAccounts);
+  };
+
+  const isAccountExpanded = (accountKey: string) => {
+    return expandedAccounts.has(accountKey);
   };
 
   const deleteTransaction = async (id: string) => {
@@ -235,7 +268,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           <TouchableOpacity
             key={filter}
             style={[
-              tw`px-3 py-1 rounded-lg`,
+              tw`px-3 py-1 rounded-full border-amber-600`,
               timeFilter === filter ? tw`bg-amber-500` : tw`bg-amber-300`,
             ]}
             onPress={() =>
@@ -251,7 +284,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
       <TextInput
         style={[
-          tw`bg-amber-100 p-2 rounded-lg mb-3 text-amber-900`,
+          tw`bg-amber-100 p-2 rounded-lg mb-3 text-amber-900 elevation-2`,
           styles.text,
         ]}
         placeholder="Filter by recipient..."
@@ -264,7 +297,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         <View style={tw`flex-row justify-between flex-wrap mb-2`}>
           <TouchableOpacity
             style={[
-              tw`px-3 py-1 rounded-lg m-1`,
+              tw`px-3 py-1 rounded-full m-1`,
               categoryFilter === "" ? tw`bg-amber-500` : tw`bg-amber-300`,
             ]}
             onPress={() => setCategoryFilter("")}
@@ -275,7 +308,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             <TouchableOpacity
               key={category}
               style={[
-                tw`px-3 py-1 rounded-lg m-1`,
+                tw`px-3 py-1 rounded-full m-1`,
                 categoryFilter === category
                   ? tw`bg-amber-500`
                   : tw`bg-amber-300`,
@@ -328,6 +361,8 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         ) : (
           Object.entries(transactionsByAccount).map(
             ([accountKey, transactions]) => {
+              if (transactions.length === 0) return null;
+
               const totals = calculateTotals(transactions);
               return (
                 <View key={accountKey}>
@@ -341,7 +376,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     </Text>
                     <Icon
                       name={
-                        expandedAccount === accountKey
+                        isAccountExpanded(accountKey)
                           ? "chevron-up"
                           : "chevron-down"
                       }
@@ -349,8 +384,10 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       color="#92400e"
                     />
                   </TouchableOpacity>
-                  {expandedAccount === accountKey && (
-                    <View style={tw`bg-amber-100 p-3 rounded-lg mt-2`}>
+                  {isAccountExpanded(accountKey) && (
+                    <View
+                      style={tw`bg-amber-100 p-3 rounded-lg mt-2 elevation-2`}
+                    >
                       <View style={tw`mb-2 flex-row justify-between`}>
                         <Text style={[tw`text-green-500`, styles.text]}>
                           + Rs.{" "}
@@ -380,17 +417,20 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                               ]}
                             >
                               {tx.type === "credit" ? "+" : "-"} Rs.{" "}
-                              {tx.amount.split(".").map((a, _) =>
-                                _ === 0 ? (
-                                  <Text key={_} style={[tw`text-xl`]}>
-                                    {a}
-                                  </Text>
-                                ) : (
-                                  <Text key={_} style={[tw`text-xs`]}>
-                                    .{a}
-                                  </Text>
-                                )
-                              )}
+                              {parseFloat(tx.amount)
+                                .toFixed(2)
+                                .split(".")
+                                .map((a, _) =>
+                                  _ === 0 ? (
+                                    <Text key={_} style={[tw`text-xl`]}>
+                                      {a}
+                                    </Text>
+                                  ) : (
+                                    <Text key={_} style={[tw`text-xs`]}>
+                                      .{a}
+                                    </Text>
+                                  )
+                                )}
                             </Text>
                             <Text
                               style={[tw`text-amber-900 text-xs`, styles.date]}
