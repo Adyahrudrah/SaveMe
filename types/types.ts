@@ -7,6 +7,7 @@ export interface Account {
   lastFourDigits: string;
   initialBalance: string;
   linkedTo?: string;
+  manualTransaction?: boolean; // Add this new property
 }
 
 export interface Transaction {
@@ -24,6 +25,7 @@ export interface Transaction {
 export interface ExtendedTransaction extends Transaction {
   isApplied: boolean; // Required, default false
   category?: string; // Optional
+  categoryIcon?: string;
 }
 
 export interface RecentTransaction {

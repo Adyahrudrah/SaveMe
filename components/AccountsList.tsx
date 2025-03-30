@@ -17,15 +17,21 @@ interface AccountsListProps {
   accounts: Account[];
   onDeleteAccount: (index: number) => void;
   onUpdateBalance: (index: number, newBalance: string) => void;
+  onTogglePrimary: (index: number) => void; // Add this
 }
 
 const AccountsList: React.FC<AccountsListProps> = ({
   accounts,
   onDeleteAccount,
   onUpdateBalance,
+  onTogglePrimary,
 }) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editedBalance, setEditedBalance] = useState<string>("");
+
+  const togglePrimaryAccount = (index: number) => {
+    onTogglePrimary(index);
+  };
 
   const startEditingBalance = (index: number, balance: string) => {
     setEditingIndex(index);
@@ -59,6 +65,16 @@ const AccountsList: React.FC<AccountsListProps> = ({
           <Text style={[tw`text-amber-900 text-2xl flex-1`, styles.text]}>
             Rs. {account.initialBalance}
           </Text>
+          <TouchableOpacity onPress={() => togglePrimaryAccount(index)}>
+            <View style={[tw`flex-row`]}>
+              <Icon
+                name={account.manualTransaction ? "check-circle" : "circle"}
+                size={20}
+                color="#92400e"
+              />
+              <Text style={[tw`ml-2`]}>Manual Transaction</Text>
+            </View>
+          </TouchableOpacity>
           {editingIndex === index ? (
             <View style={tw`flex-row items-center`}>
               <TextInput

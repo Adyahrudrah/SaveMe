@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Account } from "../types/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import Icon from "react-native-vector-icons/Feather";
 import SpendingForecast from "./SpendingForcast";
 import tw from "twrnc";
@@ -19,6 +20,7 @@ interface RecentTransaction {
   id: string;
   recipient: string;
   category?: string;
+  categoryIcon?: string; // Added categoryIcon property
   amount: string;
   accountName: string;
   lastFourDigits: string;
@@ -107,7 +109,9 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     }
     if (categoryFilter) {
       filtered = filtered.filter(
-        (tx) => tx.category?.toLowerCase() === categoryFilter.toLowerCase()
+        (tx) =>
+          tx.category?.toLowerCase() + "|" + tx.categoryIcon?.toLowerCase() ===
+          categoryFilter.toLowerCase()
       );
     }
     return filtered;
@@ -131,7 +135,11 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   };
 
   const uniqueCategories = Array.from(
-    new Set(recentTransactions.map((tx) => tx.category).filter(Boolean))
+    new Set(
+      recentTransactions
+        .map((tx) => tx.category + "|" + tx.categoryIcon)
+        .filter(Boolean)
+    )
   ) as string[];
 
   const transactionsByAccount = accounts.reduce((acc, account) => {
@@ -222,7 +230,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         Recent Transactions
       </Text>
 
-      <View style={tw`flex-row justify-around mb-3`}>
+      <View style={tw`flex-row justify-between mb-3`}>
         {["all", "daily", "monthly", "yearly"].map((filter) => (
           <TouchableOpacity
             key={filter}
@@ -274,7 +282,16 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               ]}
               onPress={() => setCategoryFilter(category)}
             >
-              <Text style={[tw`text-amber-900`, styles.text]}>{category}</Text>
+              <View style={[tw`flex-row gap-1 items-center`]}>
+                <MaterialIcons
+                  name={category.split("|")[1]}
+                  size={20}
+                  color="#92400e"
+                />
+                <Text style={[tw`text-amber-900`, styles.text]}>
+                  {category.split("|")[0]}
+                </Text>
+              </View>
             </TouchableOpacity>
           ))}
         </View>
@@ -391,8 +408,15 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                             </Text>
                             {tx.category && (
                               <View
-                                style={tw`bg-amber-500/20 px-2 py-1 rounded-full`}
+                                style={[
+                                  tw`flex-row gap-1 items-center bg-amber-300/50 px-2 py-1 rounded-full`,
+                                ]}
                               >
+                                <MaterialIcons
+                                  name={tx.categoryIcon || "more"}
+                                  size={16}
+                                  color="#92400e"
+                                />
                                 <Text
                                   style={[
                                     tw`text-amber-900 text-xs`,

@@ -93,6 +93,7 @@ const App: React.FC = () => {
         ? primaryAccount!.initialBalance
         : initialBalance,
       linkedTo: linkedTo || undefined,
+      manualTransaction: false, // Start as non-primary by default
     };
     setAccounts([...accounts, newAccount]);
     setAccountName("");
@@ -104,11 +105,51 @@ const App: React.FC = () => {
     setAlertVisible(true);
   };
 
-  const handleDeleteAccount = (index: number) => {
-    setAccounts(accounts.filter((_, i) => i !== index));
-    setAlertTitle("Success");
-    setAlertMessage("Account deleted!");
-    setAlertVisible(true);
+  const handleDeleteAccount = async (index: number) => {
+    const accountToDelete = accounts[index];
+
+    try {
+      // Remove transactions associated with this account
+      const [savedTransactions, savedRecent] = await Promise.all([
+        AsyncStorage.getItem("transactions"),
+        AsyncStorage.getItem("recentTransactions"),
+      ]);
+
+      if (savedTransactions) {
+        const transactions = JSON.parse(savedTransactions);
+        const updatedTransactions = transactions.filter(
+          (tx: any) => tx.lastFourDigits !== accountToDelete.lastFourDigits
+        );
+        await AsyncStorage.setItem(
+          "transactions",
+          JSON.stringify(updatedTransactions)
+        );
+      }
+
+      if (savedRecent) {
+        const recentTransactions = JSON.parse(savedRecent);
+        const updatedRecent = recentTransactions.filter(
+          (tx: any) => tx.lastFourDigits !== accountToDelete.lastFourDigits
+        );
+        await AsyncStorage.setItem(
+          "recentTransactions",
+          JSON.stringify(updatedRecent)
+        );
+      }
+
+      // Update accounts state
+      setAccounts(accounts.filter((_, i) => i !== index));
+      setRefreshTransactions((prev) => !prev); // Trigger refresh
+
+      setAlertTitle("Success");
+      setAlertMessage("Account and related transactions deleted!");
+      setAlertVisible(true);
+    } catch (error) {
+      console.error("Error deleting account and transactions:", error);
+      setAlertTitle("Error");
+      setAlertMessage("Failed to delete account and transactions");
+      setAlertVisible(true);
+    }
   };
 
   const handleUpdateBalance = (index: number, newBalance: string) => {
@@ -119,6 +160,14 @@ const App: React.FC = () => {
         acc.initialBalance = newBalance;
       }
     });
+    setAccounts(updatedAccounts);
+  };
+
+  const handleTogglePrimary = (index: number) => {
+    const updatedAccounts = accounts.map((account, i) => ({
+      ...account,
+      manualTransaction: i === index ? !account.manualTransaction : false,
+    }));
     setAccounts(updatedAccounts);
   };
 
@@ -170,6 +219,7 @@ const App: React.FC = () => {
                   accounts={accounts}
                   onDeleteAccount={handleDeleteAccount}
                   onUpdateBalance={handleUpdateBalance}
+                  onTogglePrimary={handleTogglePrimary}
                 />
               )}
               <ManageAccounts

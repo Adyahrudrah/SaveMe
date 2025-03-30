@@ -7,14 +7,17 @@ import {
   Platform,
   TouchableOpacity,
   StyleSheet,
+  ScrollView,
 } from "react-native";
 import { request, PERMISSIONS } from "react-native-permissions";
 import SmsAndroid from "react-native-get-sms-android";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import Icon from "react-native-vector-icons/Feather";
 import { Account, ExtendedTransaction } from "../types/types"; // Import unified type
 import CustomAlert from "./CustomeAlert";
 import tw from "twrnc";
-import TransactionModal from "./ReviewTransactions";
+import ReviewTransactions from "./ReviewTransactions";
 
 interface TransactionManagerProps {
   accounts: Account[];
@@ -34,6 +37,8 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
   const [savedRecipients, setSavedRecipients] = useState<string[]>([]);
   const [savedCategories, setSavedCategories] = useState<string[]>([]);
   const textInputRef = useRef<TextInput>(null);
+
+  const [selectedAccount, setSelectedAccount] = useState("");
 
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
@@ -85,6 +90,14 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
     setUnappliedCount(messages.filter((msg) => !msg.isApplied).length);
   }, [messages]);
 
+  useEffect(() => {
+    setSelectedAccount(
+      accounts.length > 0
+        ? accounts.find((acc) => acc.manualTransaction)?.lastFourDigits || ""
+        : ""
+    );
+  }, [accounts]);
+
   const requestSmsPermission = async () => {
     if (Platform.OS === "android") {
       const result = await request(PERMISSIONS.ANDROID.READ_SMS);
@@ -130,10 +143,12 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
                 : body.match(/spent|deduct|debit|sent|txn/i)
                 ? "debit"
                 : "debit";
-              const amountMatch: RegExpMatchArray | null =
-                body.match(/Rs\.(\d+(\.\d+)?)/);
+              const amountMatch: RegExpMatchArray | null = body.match(
+                /Rs\.\s?(\d+(?:,\d{3})*\.\d{2})/
+              );
+
               const amount: number = amountMatch
-                ? parseFloat(amountMatch[1])
+                ? parseFloat(amountMatch[1].replace(",", ""))
                 : 0;
               const recipientMatch: RegExpMatchArray | null = body.match(
                 /(?:At|To):?\s*([A-Za-z0-9\s]+)/i
@@ -152,7 +167,8 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
                 editableAmount: amount.toFixed(2), // Always a string
                 recipient,
                 date: msg.date,
-                category: undefined, // Optional field
+                category: undefined,
+                categoryIcon: "",
               };
             })
             .filter((msg: ExtendedTransaction): boolean =>
@@ -251,9 +267,27 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
     );
   };
 
+  const updateCategoryIcon = (id: string, iconName: string) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === id ? { ...msg, categoryIcon: iconName } : msg
+      )
+    );
+  };
+
   const applyTransaction = async (id: string) => {
     const transaction = messages.find((msg) => msg.id === id);
     if (transaction) {
+      if (transaction.message === "Manual Entry") {
+        const amount = parseFloat(transaction.editableAmount);
+        const message = `Manual ${transaction.type}: Rs.${amount.toFixed(
+          2
+        )} to ${transaction.recipient} for ${transaction.category}`;
+
+        transaction.message = message;
+        transaction.amount = amount;
+      }
+
       if (!transaction.recipient.trim()) {
         setAlertTitle("Error");
         setAlertMessage("Recipient is required.");
@@ -308,6 +342,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
           id: transaction.id,
           recipient: handleRecipient(transaction.recipient),
           category: transaction.category,
+          categoryIcon: transaction.categoryIcon,
           amount: transaction.editableAmount,
           accountName: primaryAccount!.name,
           lastFourDigits: primaryAccount!.lastFourDigits,
@@ -406,6 +441,33 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
 
   const unappliedMessages = messages.filter((msg) => !msg.isApplied);
 
+  // Update your handleManualEntry function
+  const handleManualEntry = () => {
+    if (accounts.length === 0) {
+      Alert.alert("No Accounts", "Please add accounts first");
+      return;
+    }
+
+    const newTransaction: ExtendedTransaction = {
+      id: `manual-${Date.now()}`,
+      message: "Manual Entry",
+      lastFourDigits: selectedAccount,
+      type: "debit",
+      amount: 0,
+      isRead: true,
+      isApplied: false,
+      editableAmount: "",
+      recipient: "",
+      date: new Date().toISOString(),
+      category: undefined,
+      categoryIcon: "",
+    };
+
+    setMessages((prev) => [...prev, newTransaction]);
+    setCurrentIndex(messages.filter((msg) => !msg.isApplied).length);
+    setIsModalVisible(true);
+  };
+
   return (
     <View style={tw`rounded-xl p-1`}>
       <Text style={[tw`text-2xl text-amber-900 mb-2 text-center`, styles.text]}>
@@ -425,9 +487,22 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
             Review Transactions
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            tw`bg-amber-500 p-3 rounded-md mt-2`,
+            accounts.length === 0 && tw`opacity-50`,
+          ]}
+          onPress={handleManualEntry}
+          disabled={accounts.length === 0}
+        >
+          <Text style={[tw`text-center text-amber-900`, styles.text]}>
+            <MaterialIcons name="add" /> Manual Transaction
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      <TransactionModal
+      <ReviewTransactions
         isVisible={isModalVisible}
         onClose={() => {
           setIsModalVisible(false);
@@ -440,6 +515,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
         expenseType={expenseType}
         updateRecipient={updateRecipient}
         updateCategory={updateCategory}
+        updateCategoryIcon={updateCategoryIcon}
         updateTransactionType={updateTransactionType}
         updateTransactionAmount={updateTransactionAmount}
         applyTransaction={applyTransaction}

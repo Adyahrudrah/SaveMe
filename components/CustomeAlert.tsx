@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, View, Text, TouchableOpacity } from "react-native";
+import { Modal, View, Text, TouchableOpacity, StatusBar } from "react-native";
 import tw from "twrnc";
 
 interface CustomAlertProps {
@@ -30,6 +30,8 @@ const CustomAlert: React.FC<CustomAlertProps> = ({
       visible={visible}
       onRequestClose={onCancel}
     >
+      <StatusBar barStyle="dark-content" backgroundColor="#ff6f00" />
+
       <View style={tw`flex-1 bg-black/50 justify-center items-center`}>
         <View style={tw`w-4/5 bg-white rounded-lg p-5 items-center shadow-lg`}>
           {title && (

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,15 +13,18 @@ import {
   TouchableWithoutFeedback,
 } from "react-native";
 import Icon from "react-native-vector-icons/Feather";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import { Transaction } from "../types/types";
 import tw from "twrnc";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface ExtendedTransaction extends Transaction {
   isApplied?: boolean;
   category?: string;
+  categoryIcon?: string;
 }
 
-interface TransactionModalProps {
+interface ReviewTransactionsProps {
   isVisible: boolean;
   onClose: () => void;
   currentIndex: number;
@@ -31,6 +34,7 @@ interface TransactionModalProps {
   expenseType: string[];
   updateRecipient: (id: string, newRecipient: string) => void;
   updateCategory: (id: string, newCategory: string) => void;
+  updateCategoryIcon: (id: string, iconName: string) => void;
   updateTransactionType: (id: string, newType: "credit" | "debit") => void;
   updateTransactionAmount: (id: string, newAmount: string) => void;
   applyTransaction: (id: string) => void;
@@ -42,7 +46,7 @@ interface TransactionModalProps {
   handleRecipient: (val: string) => string;
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({
+const ReviewTransactions: React.FC<ReviewTransactionsProps> = ({
   isVisible,
   onClose,
   currentIndex,
@@ -52,35 +56,109 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   expenseType,
   updateRecipient,
   updateCategory,
+  updateCategoryIcon,
   updateTransactionType,
   updateTransactionAmount,
   applyTransaction,
   skipCurrentTransaction,
   goToPrev,
   goToNext,
-  clearRecipient,
-  textInputRef,
   handleRecipient,
 }) => {
-  const [activeInput, setActiveInput] = useState<
-    "recipient" | "category" | "amount" | null
-  >(null);
   const [isKeyboardRequested, setIsKeyboardRequested] = useState(false);
   const recipientInputRef = useRef<TextInput>(null);
   const categoryInputRef = useRef<TextInput>(null);
   const amountInputRef = useRef<TextInput>(null);
+  const categoryIconInputRef = useRef<TextInput>(null);
 
-  if (!isVisible || !unappliedMessages[currentIndex]) return null;
+  const [iconSearchText, setIconSearchText] = useState("");
+  const [showIconSuggestions, setShowIconSuggestions] = useState(false);
+  const [showRecipientSuggestions, setShowRecipientSuggestions] =
+    useState(false);
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+  const [shouldClose, setShouldClose] = useState(false);
+
+  useEffect(() => {
+    if (shouldClose) {
+      onClose();
+      setShouldClose(false);
+    }
+  }, [shouldClose, onClose]);
+
+  if (!isVisible) return null;
+
+  if (!unappliedMessages[currentIndex]) {
+    if (!shouldClose) setShouldClose(true);
+    return null;
+  }
+
+  const allIconNames = Object.keys(MaterialIcons.getRawGlyphMap());
+
+  const getMatchingIcons = (searchText: string) => {
+    if (!searchText) return [];
+
+    const searchLower = searchText.toLowerCase();
+    return allIconNames
+      .filter((iconName) => iconName.includes(searchLower))
+      .slice(0, 8);
+  };
+
+  const getMatchingRecipients = () => {
+    const currentRecipient =
+      unappliedMessages[currentIndex].recipient.toLowerCase();
+    return savedRecipients
+      .filter((recipient) => recipient.toLowerCase().includes(currentRecipient))
+      .slice(0, 5);
+  };
+
+  const getMatchingCategories = () => {
+    const currentCategory =
+      unappliedMessages[currentIndex].category?.toLowerCase() || "";
+    return [...expenseType, ...savedCategories].filter((category) =>
+      category.toLowerCase().includes(currentCategory)
+    );
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const checkCategoryAndSetIcon = async (category: string) => {
+    try {
+      const savedRecent = await AsyncStorage.getItem("recentTransactions");
+      if (!savedRecent) return false;
+
+      const recentTransactions = JSON.parse(savedRecent);
+      const foundTransaction = recentTransactions.find(
+        (txn: any) => txn.category?.toLowerCase() === category.toLowerCase()
+      );
+
+      if (foundTransaction && foundTransaction.categoryIcon) {
+        setIconSearchText(foundTransaction.categoryIcon);
+        setShowIconSuggestions(true);
+        return foundTransaction.categoryIcon;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error checking recent transactions:", error);
+      return false;
+    }
+  };
 
   const handleInputAction = (type: "recipient" | "category" | "amount") => {
     const currentId = unappliedMessages[currentIndex].id;
 
-    // Helper function to delete last word
     const deleteLastWord = (str: string) => {
       if (!str) return "";
-      // Trim any trailing whitespace first
       const trimmedStr = str.trimEnd();
-      // Find last space or return empty string
       const lastSpaceIndex = trimmedStr.lastIndexOf(" ");
       return lastSpaceIndex === -1
         ? ""
@@ -93,12 +171,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         const newValue = deleteLastWord(currentValue);
         updateRecipient(currentId, newValue);
         if (newValue === "") {
-          setActiveInput(null);
           setIsKeyboardRequested(false);
           Keyboard.dismiss();
         }
       } else {
-        setActiveInput("recipient");
         setIsKeyboardRequested(true);
         setTimeout(() => recipientInputRef.current?.focus(), 100);
       }
@@ -108,28 +184,24 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         const newValue = deleteLastWord(currentValue);
         updateCategory(currentId, newValue);
         if (newValue === "") {
-          setActiveInput(null);
+          updateCategoryIcon(currentId, "");
           setIsKeyboardRequested(false);
           Keyboard.dismiss();
         }
       } else {
-        setActiveInput("category");
         setIsKeyboardRequested(true);
         setTimeout(() => categoryInputRef.current?.focus(), 100);
       }
     } else {
-      // amount - keep character-by-character deletion for numbers
       const currentValue = unappliedMessages[currentIndex].editableAmount || "";
       if (currentValue) {
         const newValue = currentValue.slice(0, -1);
         updateTransactionAmount(currentId, newValue);
         if (newValue === "") {
-          setActiveInput(null);
           setIsKeyboardRequested(false);
           Keyboard.dismiss();
         }
       } else {
-        setActiveInput("amount");
         setIsKeyboardRequested(true);
         setTimeout(() => amountInputRef.current?.focus(), 100);
       }
@@ -137,16 +209,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   };
 
   const handleInputFocus = (type: "recipient" | "category" | "amount") => {
-    setActiveInput(type);
     if (!isKeyboardRequested) {
       Keyboard.dismiss();
     }
   };
 
   const handleOutsideClick = () => {
-    setActiveInput(null);
     setIsKeyboardRequested(false);
     Keyboard.dismiss();
+    setShowRecipientSuggestions(false);
+    setShowCategorySuggestions(false);
+    setShowIconSuggestions(false);
   };
 
   return (
@@ -166,7 +239,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   style={[
                     tw`p-2 rounded-md`,
                     unappliedMessages[currentIndex].type === "credit"
-                      ? tw`bg-amber-500`
+                      ? tw`bg-green-500`
                       : tw`bg-amber-300`,
                   ]}
                   onPress={() =>
@@ -182,7 +255,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   style={[
                     tw`p-2 rounded-md`,
                     unappliedMessages[currentIndex].type === "debit"
-                      ? tw`bg-amber-500`
+                      ? tw`bg-red-500`
                       : tw`bg-amber-300`,
                   ]}
                   onPress={() =>
@@ -195,74 +268,203 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   <Text style={[tw`text-amber-900`, styles.text]}>Debit</Text>
                 </TouchableOpacity>
               </View>
-              <View style={tw`flex-row relative h-14 mb-2`}>
+
+              {/* Recipient Input with Horizontal Scrollable Suggestions */}
+              <View style={tw`relative h-14 mb-2`}>
                 <TextInput
                   ref={recipientInputRef}
                   style={[
-                    tw`border border-amber-500 rounded-md p-2 text-amber-900 w-full h-[90%]`,
+                    tw`border border-amber-500 rounded-md p-2 text-amber-900 w-full h-full`,
                     styles.text,
                   ]}
                   value={handleRecipient(
-                    unappliedMessages[currentIndex].recipient.trim()
+                    unappliedMessages[currentIndex].recipient
                   )}
-                  onChangeText={(text) =>
-                    updateRecipient(
-                      unappliedMessages[currentIndex].id,
-                      text.trim()
-                    )
-                  }
-                  onFocus={() => handleInputFocus("recipient")}
-                  showSoftInputOnFocus={isKeyboardRequested}
+                  onChangeText={(text) => {
+                    updateRecipient(unappliedMessages[currentIndex].id, text);
+                    setShowRecipientSuggestions(
+                      getMatchingRecipients().length > 0
+                    );
+                  }}
+                  onFocus={() => {
+                    setShowRecipientSuggestions(
+                      getMatchingRecipients().length > 0
+                    );
+                    setIsKeyboardRequested(true);
+                  }}
                   placeholder="Enter recipient"
                   placeholderTextColor="#92400e"
                 />
-                <TouchableOpacity
-                  style={tw`absolute right-1 top-1 px-2 bg-amber-100 h-[75%] rounded-md justify-center`}
-                  onPress={() => handleInputAction("recipient")}
-                >
-                  <Icon
-                    name={
-                      unappliedMessages[currentIndex].recipient ? "x" : "edit-2"
-                    }
-                    size={24}
-                    color="#92400e"
-                  />
-                </TouchableOpacity>
+
+                {showRecipientSuggestions && (
+                  <View style={[styles.horizontalTooltip, tw`bg-amber-100`]}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={tw`py-1`}
+                    >
+                      {getMatchingRecipients().length > 0 &&
+                        getMatchingRecipients().map((recipient, index) => (
+                          <TouchableOpacity
+                            key={index}
+                            style={tw`px-3 py-1 mx-1 bg-amber-200 rounded-full`}
+                            onPress={() => {
+                              updateRecipient(
+                                unappliedMessages[currentIndex].id,
+                                recipient
+                              );
+                              setShowRecipientSuggestions(false);
+                            }}
+                          >
+                            <Text style={[tw`text-amber-900`, styles.text]}>
+                              {recipient}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
-              {/* Category Input */}
-              <View style={tw`flex-row relative h-14 mb-2`}>
-                <TextInput
-                  ref={categoryInputRef}
-                  style={[
-                    tw`border border-amber-500 rounded-md p-2 text-amber-900 w-full h-[90%]`,
-                    styles.text,
-                  ]}
-                  value={unappliedMessages[currentIndex].category || ""}
-                  onChangeText={(text) =>
-                    updateCategory(unappliedMessages[currentIndex].id, text)
-                  }
-                  onFocus={() => handleInputFocus("category")}
-                  showSoftInputOnFocus={isKeyboardRequested}
-                  placeholder="Enter category"
-                  placeholderTextColor="#92400e"
-                />
-                <TouchableOpacity
-                  style={tw`absolute right-1 top-1 px-2 h-[75%] rounded-md justify-center`}
-                  onPress={() => handleInputAction("category")}
+              {/* Category Input with Horizontal Scrollable Suggestions */}
+              <View style={tw`relative h-14 mb-2`}>
+                <View
+                  style={tw`flex-row items-center border border-amber-500 rounded-md w-full h-full`}
                 >
-                  <Icon
-                    name={
-                      unappliedMessages[currentIndex].category ? "x" : "edit-2"
-                    }
-                    size={24}
-                    color="#92400e"
+                  {unappliedMessages[currentIndex].categoryIcon && (
+                    <View style={tw`pl-2`}>
+                      <MaterialIcons
+                        name={unappliedMessages[currentIndex].categoryIcon}
+                        size={20}
+                        color="#92400e"
+                      />
+                    </View>
+                  )}
+                  <TextInput
+                    ref={categoryInputRef}
+                    style={[tw`p-2 text-amber-900 flex-1`, styles.text]}
+                    value={unappliedMessages[currentIndex].category || ""}
+                    onChangeText={(text) => {
+                      updateCategory(unappliedMessages[currentIndex].id, text);
+                      setShowCategorySuggestions(
+                        getMatchingCategories().length > 0
+                      );
+                    }}
+                    onFocus={() => {
+                      setShowCategorySuggestions(true);
+                      setIsKeyboardRequested(true);
+                    }}
+                    placeholder="Enter category"
+                    placeholderTextColor="#92400e"
                   />
-                </TouchableOpacity>
+                </View>
+
+                {showCategorySuggestions && (
+                  <View style={[styles.horizontalTooltip, tw`bg-amber-100`]}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={tw`py-1`}
+                    >
+                      {getMatchingCategories().length > 0 &&
+                        getMatchingCategories().map((category, index) => (
+                          <TouchableOpacity
+                            key={index}
+                            style={tw`px-3 py-1 mx-1 bg-amber-200 rounded-full`}
+                            onPress={async () => {
+                              updateCategory(
+                                unappliedMessages[currentIndex].id,
+                                category
+                              );
+                              await checkCategoryAndSetIcon(category);
+                              setShowCategorySuggestions(false);
+                            }}
+                          >
+                            <Text style={[tw`text-amber-900`, styles.text]}>
+                              {category}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              {/* Icon Search Input with Horizontal Scrollable Suggestions */}
+              <View style={tw`relative h-14 mb-2`}>
+                <View
+                  style={tw`flex-row items-center border border-amber-500 rounded-md w-full h-full`}
+                >
+                  <TextInput
+                    ref={categoryIconInputRef}
+                    style={[tw`p-2 text-amber-900 flex-1`, styles.text]}
+                    value={iconSearchText}
+                    onChangeText={(text) => {
+                      setIconSearchText(text);
+                      setShowIconSuggestions(
+                        getMatchingIcons(iconSearchText.toLowerCase()).length >
+                          0
+                      );
+                    }}
+                    onFocus={() => {
+                      setShowIconSuggestions(iconSearchText.length > 0);
+                    }}
+                    placeholder="Search for icon"
+                    placeholderTextColor="#92400e"
+                  />
+                  {unappliedMessages[currentIndex].categoryIcon && (
+                    <TouchableOpacity
+                      style={tw`px-2`}
+                      onPress={() => {
+                        updateCategoryIcon(
+                          unappliedMessages[currentIndex].id,
+                          ""
+                        );
+                      }}
+                    >
+                      <Icon name="x" size={20} color="#92400e" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {showIconSuggestions && (
+                  <View style={[styles.horizontalTooltip, tw`bg-amber-100`]}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={tw`py-1`}
+                    >
+                      {getMatchingIcons(iconSearchText.toLowerCase()).length >
+                        0 &&
+                        getMatchingIcons(iconSearchText.toLowerCase()).map(
+                          (iconName) => (
+                            <TouchableOpacity
+                              key={iconName}
+                              style={tw`p-2 mx-1`}
+                              onPress={() => {
+                                updateCategoryIcon(
+                                  unappliedMessages[currentIndex].id,
+                                  iconName
+                                );
+                                setIconSearchText("");
+                                setShowIconSuggestions(false);
+                              }}
+                            >
+                              <MaterialIcons
+                                name={iconName}
+                                size={24}
+                                color="#92400e"
+                              />
+                            </TouchableOpacity>
+                          )
+                        )}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
               {/* Amount Input */}
-              <View style={tw`flex-row relative h-12 mb-3`}>
+              <View style={tw`relative h-12 mb-3`}>
                 <TextInput
                   ref={amountInputRef}
                   style={[
@@ -279,30 +481,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   keyboardType="numeric"
                   placeholder="Edit amount"
                   placeholderTextColor="#92400e"
-                  onFocus={() => handleInputFocus("amount")}
-                  showSoftInputOnFocus={isKeyboardRequested}
+                  onFocus={() => setIsKeyboardRequested(true)}
                 />
-                <TouchableOpacity
-                  style={tw`absolute right-1 top-1 px-2 h-[75%] rounded-md justify-center`}
-                  onPress={() => handleInputAction("amount")}
-                >
-                  <Icon
-                    name={
-                      unappliedMessages[currentIndex].editableAmount
-                        ? "x"
-                        : "edit-2"
-                    }
-                    size={24}
-                    color="#92400e"
-                  />
-                </TouchableOpacity>
               </View>
 
               {/* Navigation Buttons */}
               <View style={tw`flex-row justify-between w-full mb-2 gap-2`}>
                 <TouchableOpacity
                   style={[
-                    tw`bg-amber-500 p-2 rounded-md flex-grow border-b-4 border-amber-600 flex items-center justify-center`,
+                    tw`bg-amber-500 p-2 rounded-md flex-grow  flex items-center justify-center`,
                     currentIndex === 0 && tw`opacity-50`,
                   ]}
                   onPress={goToPrev}
@@ -311,7 +498,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   <Icon name="arrow-left" size={20} color="#92400e" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={tw`bg-amber-500 p-2 rounded-md flex-grow border-b-4 border-amber-600 flex items-center justify-center`}
+                  style={tw`bg-amber-500 p-2 rounded-md flex-grow  flex items-center justify-center`}
                   onPress={() =>
                     applyTransaction(unappliedMessages[currentIndex].id)
                   }
@@ -321,7 +508,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={tw`bg-amber-500 p-2 rounded-md flex-grow border-b-4 border-amber-600 flex items-center justify-center`}
+                  style={tw`bg-amber-500 p-2 rounded-md flex-grow  flex items-center justify-center`}
                   onPress={skipCurrentTransaction}
                 >
                   <Text style={[tw`text-amber-900 text-center`, styles.text]}>
@@ -330,7 +517,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
-                    tw`bg-amber-500 p-2 rounded-md flex-grow border-b-4 border-amber-600 flex items-center justify-center`,
+                    tw`bg-amber-500 p-2 rounded-md flex-grow  flex items-center justify-center`,
                     currentIndex === unappliedMessages.length - 1 &&
                       tw`opacity-50`,
                   ]}
@@ -352,101 +539,22 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               <Text
                 style={[tw`text-xs text-amber-900 mb-3 flex-1`, styles.text]}
               >
-                {unappliedMessages[currentIndex].message}
+                {unappliedMessages[currentIndex].message === "Manual Entry"
+                  ? "Manual Transaction Entry"
+                  : unappliedMessages[currentIndex].message}
+                {"\n"}
+                {formatDate(unappliedMessages[currentIndex].date)}
               </Text>
             </View>
 
-            {/* Close Button / Suggestions Area */}
-            <View
-              style={tw`${
-                !isKeyboardRequested && activeInput ? "h-20" : "h-10"
-              } bg-amber-600 flex-row`}
-            >
-              {activeInput && !isKeyboardRequested ? (
-                <ScrollView horizontal={true} style={tw`flex-1 p-1`}>
-                  <View style={tw`flex-row items-center`}>
-                    {activeInput === "recipient" &&
-                      savedRecipients.length > 0 &&
-                      savedRecipients
-                        .filter((recipient) =>
-                          recipient
-                            .toLowerCase()
-                            .includes(
-                              unappliedMessages[
-                                currentIndex
-                              ].recipient.toLowerCase()
-                            )
-                        )
-                        .map((recipient, index) => (
-                          <TouchableOpacity
-                            key={index}
-                            style={tw`bg-amber-300/50 rounded-lg border-amber-600 border mr-2 p-2 flex items-center justify-center flex-nowrap`}
-                            onPress={() => {
-                              updateRecipient(
-                                unappliedMessages[currentIndex].id,
-                                recipient
-                              );
-                              setActiveInput(null);
-                            }}
-                          >
-                            <Text
-                              style={[tw`text-amber-800 text-sm`, styles.text]}
-                            >
-                              {recipient}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                    {activeInput === "category" &&
-                      [...expenseType, ...savedCategories]
-                        .filter(
-                          (category, index, self) =>
-                            category &&
-                            self.indexOf(category) === index &&
-                            (!unappliedMessages[currentIndex].category ||
-                              category
-                                .toLowerCase()
-                                .includes(
-                                  unappliedMessages[
-                                    currentIndex
-                                  ].category?.toLowerCase() || ""
-                                ))
-                        )
-                        .map((category, index) => (
-                          <TouchableOpacity
-                            key={index}
-                            style={tw`bg-amber-300/50 rounded-lg border-amber-600 border mr-2 p-2 flex items-center justify-center`}
-                            onPress={() => {
-                              updateCategory(
-                                unappliedMessages[currentIndex].id,
-                                category
-                              );
-                              setActiveInput(null);
-                            }}
-                          >
-                            <Text
-                              style={[tw`text-amber-800 text-sm`, styles.text]}
-                            >
-                              {category}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                    {activeInput === "amount" && (
-                      <Text
-                        style={[tw`text-amber-800 text-sm p-2`, styles.text]}
-                      >
-                        Click edit to enter amount manually
-                      </Text>
-                    )}
-                  </View>
-                </ScrollView>
-              ) : (
-                <TouchableOpacity
-                  style={tw`flex-1 flex items-center justify-center`}
-                  onPress={onClose}
-                >
-                  <Icon name="x" size={20} color="#92400e" />
-                </TouchableOpacity>
-              )}
+            {/* Close Button */}
+            <View style={tw`h-10 bg-amber-600 flex-row`}>
+              <TouchableOpacity
+                style={tw`flex-1 flex items-center justify-center`}
+                onPress={onClose}
+              >
+                <Icon name="x" size={20} color="#92400e" />
+              </TouchableOpacity>
             </View>
           </View>
         </TouchableWithoutFeedback>
@@ -459,6 +567,23 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: "VarelaRound-Regular",
   },
+  horizontalTooltip: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 10,
+    maxHeight: 100,
+  },
 });
 
-export default TransactionModal;
+export default ReviewTransactions;
