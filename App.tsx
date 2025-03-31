@@ -13,6 +13,7 @@ import TransactionManager from "./components/TransactionManager";
 import RecentTransactions from "./components/RecentTransactions";
 import ManageAccounts from "./components/ManageAccounts";
 import AccountsList from "./components/AccountsList";
+import DebtManager from "./components/DebtManager";
 import { Account, AccountType } from "./types/types";
 import Icon from "react-native-vector-icons/Feather";
 import tw from "twrnc";
@@ -22,6 +23,7 @@ import AsyncStorageDataManager from "./components/AsyncStorageExporter";
 const App: React.FC = () => {
   const [accountType, setAccountType] = useState<AccountType>("Bank Account");
   const [accountName, setAccountName] = useState<string>("");
+  const [bankAddress, setBankAddress] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState<string>("");
   const [initialBalance, setInitialBalance] = useState<string>("");
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -94,12 +96,14 @@ const App: React.FC = () => {
         ? primaryAccount!.initialBalance
         : initialBalance,
       linkedTo: linkedTo || undefined,
-      manualTransaction: false, // Start as non-primary by default
+      manualTransaction: false,
+      bankAddress: bankAddress,
     };
     setAccounts([...accounts, newAccount]);
     setAccountName("");
     setAccountNumber("");
     setInitialBalance("");
+    setBankAddress("");
     setLinkedTo(null);
     setAlertTitle("Success");
     setAlertMessage("Account added!");
@@ -190,6 +194,7 @@ const App: React.FC = () => {
             setAccounts={setAccounts}
             onTransactionSubmit={handleTransactionSubmit}
           />
+          <DebtManager />
           <RecentTransactions
             accounts={accounts}
             setAccounts={setAccounts}
@@ -236,6 +241,8 @@ const App: React.FC = () => {
                 setAccountNumber={setAccountNumber}
                 initialBalance={initialBalance}
                 setInitialBalance={setInitialBalance}
+                bankAddress={bankAddress}
+                setBankAddress={setBankAddress}
                 onAddAccount={handleAddAccount}
                 accounts={accounts}
                 setLinkedTo={setLinkedTo}

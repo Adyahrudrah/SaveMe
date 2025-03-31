@@ -13,7 +13,6 @@ import { request, PERMISSIONS } from "react-native-permissions";
 import SmsAndroid from "react-native-get-sms-android";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import Icon from "react-native-vector-icons/Feather";
 import { Account, ExtendedTransaction } from "../types/types"; // Import unified type
 import CustomAlert from "./CustomeAlert";
 import tw from "twrnc";
@@ -113,6 +112,17 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
     }
   };
 
+  const regexFilters = {
+    accountNumber: (accountNumbers: string[]) =>
+      new RegExp(accountNumbers.join("|"), "i"),
+    accountAddress: (accountAddress: string[]) =>
+      new RegExp(accountAddress.join("|"), "i"),
+    creditType: /credit|receive/i,
+    debitType: /spent|deduct|debit|sent|txn/i,
+    amount: /(Rs|INR)\.?\s?(\d+(?:,\d+)*(?:\.\d{2})?)/,
+    recipient: /(?:At|To):?\s*([A-Za-z0-9\s]+)/i,
+  };
+
   const fetchSmsMessages = () => {
     if (Platform.OS === "android") {
       const filter = { box: "inbox" };
@@ -125,33 +135,39 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
         },
         (_count: string, smsList: string) => {
           const messagesArray = JSON.parse(smsList);
+          const accountAddresses = accounts.map((acc) => acc.bankAddress);
           const processedMessages: ExtendedTransaction[] = messagesArray
             .filter((msg: any): boolean => {
-              return msg.address.toUpperCase().includes("HDFC");
+              return msg.address
+                .toUpperCase()
+                .match(regexFilters.accountAddress(accountAddresses));
             })
             .map((msg: any): ExtendedTransaction => {
               const body: string = msg.body;
               const accountNumbers = accounts.map((acc) => acc.lastFourDigits);
+
               const lastFourDigitsMatch: RegExpMatchArray | null = body.match(
-                new RegExp(accountNumbers.join("|"), "i")
+                regexFilters.accountNumber(accountNumbers)
               );
               const lastFourDigits: string = lastFourDigitsMatch
                 ? lastFourDigitsMatch[0]
                 : "";
-              const type: "credit" | "debit" = body.match(/credit|receive/i)
+              const type: "credit" | "debit" = body.match(
+                regexFilters.creditType
+              )
                 ? "credit"
-                : body.match(/spent|deduct|debit|sent|txn/i)
+                : body.match(regexFilters.debitType)
                 ? "debit"
                 : "debit";
               const amountMatch: RegExpMatchArray | null = body.match(
-                /Rs\.?\s?(\d+(?:,\d{3})*\.\d{2})/
+                regexFilters.amount
               );
 
               const amount: number = amountMatch
-                ? parseFloat(amountMatch[1].replace(",", ""))
+                ? parseFloat(amountMatch[2].replace(",", ""))
                 : 0;
               const recipientMatch: RegExpMatchArray | null = body.match(
-                /(?:At|To):?\s*([A-Za-z0-9\s]+)/i
+                regexFilters.recipient
               );
               const recipient: string = recipientMatch
                 ? recipientMatch[1].trim()
@@ -256,7 +272,7 @@ const TransactionManager: React.FC<TransactionManagerProps> = ({
   const updateCategory = (id: string, newCategory: string) => {
     setMessages((prev) =>
       prev.map((msg) =>
-        msg.id === id ? { ...msg, category: newCategory } : msg
+        msg.id === id ? { ...msg, category: newCategory.trim() } : msg
       )
     );
   };

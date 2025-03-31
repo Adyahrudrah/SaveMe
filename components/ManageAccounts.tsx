@@ -19,6 +19,8 @@ interface ManageAccountsProps {
   setAccountNumber: (number: string) => void;
   initialBalance: string;
   setInitialBalance: (balance: string) => void;
+  bankAddress: string;
+  setBankAddress: (balance: string) => void;
   onAddAccount: () => void;
   accounts: Account[];
   setLinkedTo: (linkedTo: string | null) => void; // Add setLinkedTo prop
@@ -33,6 +35,8 @@ const ManageAccounts: React.FC<ManageAccountsProps> = ({
   setAccountNumber,
   initialBalance,
   setInitialBalance,
+  bankAddress,
+  setBankAddress,
   onAddAccount,
   accounts,
   setLinkedTo,
@@ -177,6 +181,16 @@ const ManageAccounts: React.FC<ManageAccountsProps> = ({
           placeholderTextColor="#92400e"
           value={accountName}
           onChangeText={setAccountName}
+        />
+        <TextInput
+          style={[
+            tw`border-b border-amber-600 rounded-md p-2 mb-3 text-amber-900`,
+            styles.text,
+          ]}
+          placeholder="Enter bank address eg. HDFCBK"
+          placeholderTextColor="#92400e"
+          value={bankAddress}
+          onChangeText={setBankAddress}
         />
         <TextInput
           style={[

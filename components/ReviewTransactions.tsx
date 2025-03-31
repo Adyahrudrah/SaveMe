@@ -114,8 +114,8 @@ const ReviewTransactions: React.FC<ReviewTransactionsProps> = ({
   const getMatchingCategories = () => {
     const currentCategory =
       unappliedMessages[currentIndex].category?.toLowerCase() || "";
-    return [...expenseType, ...savedCategories].filter((category) =>
-      category.toLowerCase().includes(currentCategory)
+    return Array.from(new Set([...expenseType, ...savedCategories])).filter(
+      (category) => category.toLowerCase().includes(currentCategory)
     );
   };
 
@@ -150,67 +150,6 @@ const ReviewTransactions: React.FC<ReviewTransactionsProps> = ({
     } catch (error) {
       console.error("Error checking recent transactions:", error);
       return false;
-    }
-  };
-
-  const handleInputAction = (type: "recipient" | "category" | "amount") => {
-    const currentId = unappliedMessages[currentIndex].id;
-
-    const deleteLastWord = (str: string) => {
-      if (!str) return "";
-      const trimmedStr = str.trimEnd();
-      const lastSpaceIndex = trimmedStr.lastIndexOf(" ");
-      return lastSpaceIndex === -1
-        ? ""
-        : trimmedStr.substring(0, lastSpaceIndex);
-    };
-
-    if (type === "recipient") {
-      const currentValue = unappliedMessages[currentIndex].recipient;
-      if (currentValue) {
-        const newValue = deleteLastWord(currentValue);
-        updateRecipient(currentId, newValue);
-        if (newValue === "") {
-          setIsKeyboardRequested(false);
-          Keyboard.dismiss();
-        }
-      } else {
-        setIsKeyboardRequested(true);
-        setTimeout(() => recipientInputRef.current?.focus(), 100);
-      }
-    } else if (type === "category") {
-      const currentValue = unappliedMessages[currentIndex].category || "";
-      if (currentValue) {
-        const newValue = deleteLastWord(currentValue);
-        updateCategory(currentId, newValue);
-        if (newValue === "") {
-          updateCategoryIcon(currentId, "");
-          setIsKeyboardRequested(false);
-          Keyboard.dismiss();
-        }
-      } else {
-        setIsKeyboardRequested(true);
-        setTimeout(() => categoryInputRef.current?.focus(), 100);
-      }
-    } else {
-      const currentValue = unappliedMessages[currentIndex].editableAmount || "";
-      if (currentValue) {
-        const newValue = currentValue.slice(0, -1);
-        updateTransactionAmount(currentId, newValue);
-        if (newValue === "") {
-          setIsKeyboardRequested(false);
-          Keyboard.dismiss();
-        }
-      } else {
-        setIsKeyboardRequested(true);
-        setTimeout(() => amountInputRef.current?.focus(), 100);
-      }
-    }
-  };
-
-  const handleInputFocus = (type: "recipient" | "category" | "amount") => {
-    if (!isKeyboardRequested) {
-      Keyboard.dismiss();
     }
   };
 
@@ -499,9 +438,10 @@ const ReviewTransactions: React.FC<ReviewTransactionsProps> = ({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={tw`bg-amber-500 p-2 rounded-md flex-grow  flex items-center justify-center`}
-                  onPress={() =>
-                    applyTransaction(unappliedMessages[currentIndex].id)
-                  }
+                  onPress={() => {
+                    applyTransaction(unappliedMessages[currentIndex].id);
+                    Keyboard.dismiss();
+                  }}
                 >
                   <Text style={[tw`text-amber-900 text-center`, styles.text]}>
                     SUBMIT
